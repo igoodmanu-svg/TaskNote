@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { History, Volume2, VolumeX, CheckCheck, Settings, RotateCw, Grid, Square, Sparkles, Heart, Filter, XCircle, LayoutGrid } from 'lucide-react';
-import { Task, getRandomColor, getRandomRotation, THEMES, ThemeKey, isDarkTheme, COLOR_ARRAY } from './types';
+import { History, Volume2, VolumeX, CheckCheck, Settings, RotateCw, Grid, Square, Sparkles, Heart, Filter, LayoutGrid, ArrowUpToLine, ArrowDownToLine, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { Task, getRandomColor, getRandomRotation, THEMES, ThemeKey, isDarkTheme, STYLE_KEYS, getStickyStyle } from './types';
 import { InputArea } from './components/InputArea';
 import { StickyNote } from './components/StickyNote';
 import { HistoryModal } from './components/HistoryModal';
@@ -59,8 +59,8 @@ const App: React.FC = () => {
       }
       const savedV1 = localStorage.getItem('adhd-notes-tasks');
       if (savedV1) {
-        const v1Data = JSON.parse(savedV1);
-        return v1Data;
+        // Migration logic handled in effect
+        return [];
       }
 
       return INITIAL_TASKS_TEXT.map(text => ({
@@ -76,6 +76,24 @@ const App: React.FC = () => {
       return [];
     }
   });
+
+  // Data Migration Logic
+  useEffect(() => {
+     try {
+         const savedV2 = localStorage.getItem(STORAGE_KEYS.TASKS);
+         // Only migrate if V2 is missing or empty array and V1 exists
+         if (!savedV2 || JSON.parse(savedV2).length === 0) {
+             const savedV1 = localStorage.getItem('adhd-notes-tasks');
+             if (savedV1) {
+                 const v1Data = JSON.parse(savedV1);
+                 if (Array.isArray(v1Data) && v1Data.length > 0) {
+                     setTasks(v1Data);
+                     // triggerToast("已自动恢复历史数据", false);
+                 }
+             }
+         }
+     } catch (e) { console.error("Migration error", e); }
+  }, []);
 
   const [appTitle, setAppTitle] = useState(() => {
     return localStorage.getItem(STORAGE_KEYS.TITLE) || "任务便利贴";
@@ -105,6 +123,9 @@ const App: React.FC = () => {
   const [zenMode, setZenMode] = useState(false);
   const [zenTaskId, setZenTaskId] = useState<string | null>(null);
   
+  // Sorting State
+  const [sortingTaskId, setSortingTaskId] = useState<string | null>(null);
+
   const [successMsg, setSuccessMsg] = useState(SUCCESS_MESSAGES[0]);
   const [currentTip, setCurrentTip] = useState(ADHD_TIPS[0]);
 
@@ -113,10 +134,6 @@ const App: React.FC = () => {
   const [toastMessage, setToastMessage] = useState("");
   const [showUndoInToast, setShowUndoInToast] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Drag and Drop Refs
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
 
   const activeTasks = tasks.filter(t => !t.isCompleted && (filterColor ? t.color === filterColor : true));
   const completedTasks = tasks.filter(t => t.isCompleted);
@@ -148,8 +165,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.THEME, currentTheme);
-    // Fix background glitch on mobile keyboard dismiss by syncing body bg
     document.body.style.backgroundColor = THEMES[currentTheme];
+    document.documentElement.style.backgroundColor = THEMES[currentTheme]; // Also sync HTML tag
   }, [currentTheme]);
 
   useEffect(() => {
@@ -184,17 +201,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && zenMode) {
-        exitZenMode();
+      if (e.key === 'Escape') {
+          if (zenMode) exitZenMode();
+          if (sortingTaskId) setSortingTaskId(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [zenMode]);
+  }, [zenMode, sortingTaskId]);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // Strict Audio Context Resuming Logic for Mobile
   useEffect(() => {
     const initAudio = () => {
       if (!soundEnabled) return;
@@ -261,14 +278,12 @@ const App: React.FC = () => {
         const now = ctx.currentTime;
 
         if (type === 'silent') {
-            // Play a silent buffer just to warm up the thread
             gain.gain.setValueAtTime(0, now);
             osc.start(now);
             osc.stop(now + 0.1);
         } else if (type === 'complete') {
-            // Microwave "Ding"
             osc.type = 'sine'; 
-            osc.frequency.setValueAtTime(1568, now); // G6 note
+            osc.frequency.setValueAtTime(1568, now); 
             
             gain.gain.setValueAtTime(0.3, now);
             gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
@@ -276,7 +291,6 @@ const App: React.FC = () => {
             osc.start(now);
             osc.stop(now + 1.5);
         } else if (type === 'add') {
-            // "Snap" sound
             osc.type = 'triangle';
             osc.frequency.setValueAtTime(600, now);
             osc.frequency.exponentialRampToValueAtTime(200, now + 0.08);
@@ -293,7 +307,6 @@ const App: React.FC = () => {
   };
 
   const triggerFeedback = () => {
-    // Play sound immediately, logic handled in completeTask
     if (navigator.vibrate) {
         navigator.vibrate(50);
     }
@@ -360,9 +373,10 @@ const App: React.FC = () => {
       setShowUndoInToast(isUndo);
       setShowToast(true);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      // Increased duration to 1500ms (1.5s)
       toastTimerRef.current = setTimeout(() => {
         setShowToast(false);
-      }, isUndo ? 1000 : 2000); 
+      }, isUndo ? 1500 : 2000); 
   };
 
   const addTask = (text: string, color: string | null) => {
@@ -436,13 +450,12 @@ const App: React.FC = () => {
         return;
     }
 
-    // 1. Warm up audio context BEFORE blocking confirm
-    // This plays a silent sound to wake up the audio thread on mobile
     playSound('silent');
 
+    // Use custom simple alert/confirm logic later, for now we kept native to ensure stability based on previous turn
+    // Actually, user complained about audio latency, so we are keeping the pre-warm logic
     setTimeout(() => {
         if (window.confirm(`【一键完成】\n\n确认将屏幕上的 ${count} 个任务全部标记为完成吗？`)) {
-           // 2. Play sound immediately after confirm
            playSound('complete');
            triggerFeedback();
            setTasks(prev => prev.map(t => 
@@ -452,28 +465,48 @@ const App: React.FC = () => {
     }, 10);
   };
 
-  // Drag and Drop Logic
-  const handleSort = () => {
-    const _tasks = [...tasks];
-    const activeTasksList = _tasks.filter(t => !t.isCompleted && (filterColor ? t.color === filterColor : true));
-    
-    if (dragItem.current === null || dragOverItem.current === null) return;
-    if (dragItem.current === dragOverItem.current) return;
-
-    const draggedTask = activeTasksList[dragItem.current];
-    const dropTask = activeTasksList[dragOverItem.current];
-
-    const draggedTaskIndex = _tasks.findIndex(t => t.id === draggedTask.id);
-    const dropTaskIndex = _tasks.findIndex(t => t.id === dropTask.id);
-
-    const draggedItemContent = _tasks.splice(draggedTaskIndex, 1)[0];
-    _tasks.splice(dropTaskIndex, 0, draggedItemContent);
-
-    setTasks(_tasks);
-    
-    dragItem.current = null;
-    dragOverItem.current = null;
+  // Sorting Logic
+  const handleSortRequest = (id: string) => {
+      if (filterColor) {
+          triggerToast("请先取消筛选再排序", false);
+          return;
+      }
+      setSortingTaskId(id);
   };
+
+  const moveTask = (direction: 'top' | 'up' | 'down' | 'bottom') => {
+      if (!sortingTaskId) return;
+
+      if (filterColor) {
+          triggerToast("请先取消筛选再排序", false);
+          return;
+      }
+
+      const _completed = tasks.filter(t => t.isCompleted);
+      const _active = tasks.filter(t => !t.isCompleted);
+      
+      const currentIndex = _active.findIndex(t => t.id === sortingTaskId);
+      if (currentIndex === -1) return;
+      
+      const item = _active[currentIndex];
+      
+      // Remove item
+      _active.splice(currentIndex, 1);
+      
+      let newIndex = currentIndex;
+      
+      if (direction === 'top') newIndex = 0;
+      else if (direction === 'bottom') newIndex = _active.length;
+      else if (direction === 'up') newIndex = Math.max(0, currentIndex - 1);
+      else if (direction === 'down') newIndex = Math.min(_active.length, currentIndex + 1);
+      
+      // Insert item
+      _active.splice(newIndex, 0, item);
+      
+      // Reconstruct global list.
+      setTasks([..._active, ..._completed]);
+  };
+
 
   const enterZenMode = (id: string) => {
     setZenTaskId(id);
@@ -519,9 +552,8 @@ const App: React.FC = () => {
       className={`min-h-[100dvh] safe-top relative overflow-x-hidden transition-colors duration-500 font-sans ${bgClass}`}
       style={{ backgroundColor: zenMode ? '#2C2C2C' : THEMES[currentTheme] }}
     >
-      
       {/* Header */}
-      <div className="max-w-5xl mx-auto px-4 md:px-12 pt-10 md:pt-16 mb-2">
+      <div className="max-w-5xl mx-auto px-4 md:px-12 pt-[calc(env(safe-area-inset-top)+3.5rem)] md:pt-16 mb-2">
         <div className="flex flex-col items-center gap-4">
           
           {/* Title */}
@@ -574,29 +606,41 @@ const App: React.FC = () => {
                   title="筛选颜色"
                 >
                    {filterColor ? (
-                      <div className="w-[18px] h-[18px] rounded-full border border-gray-300" style={{ backgroundColor: filterColor }}></div>
+                      <div className="w-[18px] h-[18px] rounded-full border border-gray-300 relative overflow-hidden" 
+                           style={{ 
+                               backgroundColor: getStickyStyle(filterColor).bg,
+                               backgroundImage: getStickyStyle(filterColor).css !== 'none' ? getStickyStyle(filterColor).css : undefined
+                           }}
+                      ></div>
                   ) : (
                       <Filter size={18} />
                   )}
                 </button>
                 {showFilterMenu && (
-                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white p-2 rounded-xl shadow-xl flex gap-1 z-[60] border border-gray-100 items-center">
+                    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-white p-2 rounded-xl shadow-xl flex gap-1 z-[60] border border-gray-100 items-center max-w-[90vw] overflow-x-auto">
                         <button 
                             onClick={() => selectFilterColor(null)} 
-                            className={`px-3 h-6 rounded-full border border-gray-200 hover:scale-105 transition-transform bg-gradient-to-r from-pink-200 via-blue-200 to-green-200 flex items-center justify-center text-[10px] font-bold text-gray-600 shadow-sm ${filterColor === null ? 'ring-2 ring-blue-300 ring-offset-1' : ''}`}
+                            className={`px-3 h-6 rounded-full border border-gray-200 hover:scale-105 transition-transform bg-gradient-to-r from-pink-200 via-blue-200 to-green-200 flex items-center justify-center text-[10px] font-bold text-gray-600 shadow-sm whitespace-nowrap ${filterColor === null ? 'ring-2 ring-blue-300 ring-offset-1' : ''}`}
                             title="全部颜色"
                         >
                           ALL
                         </button>
-                        <div className="w-px h-4 bg-gray-200 mx-1"></div>
-                        {COLOR_ARRAY.map(c => (
-                            <button 
-                                key={c} 
-                                onClick={() => selectFilterColor(c)}
-                                className="w-6 h-6 rounded-full border border-gray-200 hover:scale-110 transition-transform shadow-sm"
-                                style={{ backgroundColor: c }}
-                            />
-                        ))}
+                        <div className="w-px h-4 bg-gray-200 mx-1 flex-shrink-0"></div>
+                        {STYLE_KEYS.map(key => {
+                            const style = getStickyStyle(key);
+                            return (
+                                <button 
+                                    key={key} 
+                                    onClick={() => selectFilterColor(key)}
+                                    className="w-6 h-6 rounded-full border border-gray-200 hover:scale-110 transition-transform shadow-sm flex-shrink-0 relative overflow-hidden"
+                                    style={{ 
+                                        backgroundColor: style.bg,
+                                        backgroundImage: style.css !== 'none' ? style.css : undefined
+                                    }}
+                                    title={style.name}
+                                />
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -665,10 +709,10 @@ const App: React.FC = () => {
                   onFocus={() => enterZenMode(task.id)}
                   onEdit={editTask}
                   onColorChange={changeTaskColor}
+                  onSort={handleSortRequest}
                   densityLevel={viewDensity}
-                  onDragStart={(i) => dragItem.current = i}
-                  onDragEnter={(i) => dragOverItem.current = i}
-                  onDragEnd={handleSort}
+                  isSorting={sortingTaskId === task.id}
+                  isSortingModeActive={!!sortingTaskId}
                 />
               ))}
             </div>
@@ -696,7 +740,7 @@ const App: React.FC = () => {
         )}
       </div>
 
-      <InputArea onAdd={addTask} isDark={isDark} />
+      {!sortingTaskId && <InputArea onAdd={addTask} isDark={isDark} />}
 
       <HistoryModal 
         isOpen={historyOpen} 
@@ -721,6 +765,62 @@ const App: React.FC = () => {
             onUndo={handleUndo} 
             showUndoButton={showUndoInToast}
           />
+      )}
+
+      {/* Sorting Control Bar (Fixed Bottom) */}
+      {sortingTaskId && (
+         <div className="fixed bottom-0 left-0 right-0 z-[120] animate-fade-in-up">
+            <div className={`w-full backdrop-blur-xl border-t shadow-[0_-4px_30px_rgba(0,0,0,0.1)] rounded-t-3xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 transition-colors duration-300 ${isDark ? 'bg-gray-900/90 border-gray-700' : 'bg-white/90 border-white/40'}`}>
+                <div className="max-w-md mx-auto px-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className={`text-sm font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                           正在调整顺序...
+                        </span>
+                        <button 
+                            onClick={() => setSortingTaskId(null)}
+                            className="bg-black text-white px-4 py-1.5 rounded-full text-sm font-bold shadow-md active:scale-95 transition-transform flex items-center gap-1"
+                        >
+                            <Check size={14} />
+                            完成
+                        </button>
+                    </div>
+                    
+                    <div className="flex justify-between gap-2">
+                        <button 
+                            onClick={() => moveTask('top')}
+                            className={`flex-1 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${isDark ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 shadow-sm'}`}
+                        >
+                            <ArrowUpToLine size={20} />
+                            <span className="text-[10px] font-bold opacity-60">置顶</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => moveTask('up')}
+                            className={`flex-1 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${isDark ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 shadow-sm'}`}
+                        >
+                             <ArrowLeft size={20} />
+                             <span className="text-[10px] font-bold opacity-60">前移</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => moveTask('down')}
+                            className={`flex-1 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${isDark ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 shadow-sm'}`}
+                        >
+                             <ArrowRight size={20} />
+                             <span className="text-[10px] font-bold opacity-60">后移</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => moveTask('bottom')}
+                            className={`flex-1 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all ${isDark ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 border border-gray-200 shadow-sm'}`}
+                        >
+                             <ArrowDownToLine size={20} />
+                             <span className="text-[10px] font-bold opacity-60">沉底</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+         </div>
       )}
     </div>
   );

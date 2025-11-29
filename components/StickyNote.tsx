@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Task, COLOR_ARRAY } from '../types';
-import { Check, Eye, Pencil, X, Trash2, Palette } from 'lucide-react';
+import { Task, STYLE_KEYS, getStickyStyle } from '../types';
+import { Check, Eye, Pencil, Trash2, Palette, ArrowLeftRight, X } from 'lucide-react';
 
 interface StickyNoteProps {
   task: Task;
@@ -12,12 +12,12 @@ interface StickyNoteProps {
   onEdit?: (id: string, newText: string) => void;
   onColorChange?: (id: string, newColor: string) => void;
   onClose?: () => void;
+  onSort?: (id: string) => void;
   className?: string;
   isZenMode?: boolean;
   densityLevel?: number;
-  onDragStart?: (index: number) => void;
-  onDragEnter?: (index: number) => void;
-  onDragEnd?: () => void;
+  isSorting?: boolean;
+  isSortingModeActive?: boolean;
 }
 
 export const StickyNote: React.FC<StickyNoteProps> = ({ 
@@ -29,12 +29,12 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
   onEdit, 
   onColorChange,
   onClose,
+  onSort,
   className = '', 
   isZenMode = false,
   densityLevel = 1,
-  onDragStart,
-  onDragEnter,
-  onDragEnd
+  isSorting = false,
+  isSortingModeActive = false,
 }) => {
   const [isExiting, setIsExiting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -43,6 +43,9 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
   const [editText, setEditText] = useState(task.text);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
+
+  // Get the style object
+  const noteStyle = getStickyStyle(task.color);
 
   // Close color picker when clicking outside
   useEffect(() => {
@@ -54,7 +57,7 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
 
     if (showColorPicker) {
       document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside); // Support mobile touch
+      document.addEventListener('touchstart', handleClickOutside); 
     }
 
     return () => {
@@ -72,7 +75,7 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
 
   const handleComplete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isExiting || isEditing || isDeleting || showColorPicker) return;
+    if (isExiting || isEditing || isDeleting || showColorPicker || isSortingModeActive) return;
     setIsExiting(true);
     setTimeout(() => {
       onComplete(task.id);
@@ -109,10 +112,15 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
       e.stopPropagation();
       setShowColorPicker(!showColorPicker);
   };
+  
+  const handleSortClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (onSort) onSort(task.id);
+  };
 
-  const changeColor = (color: string) => {
+  const changeColor = (styleKey: string) => {
       if (onColorChange) {
-          onColorChange(task.id, color);
+          onColorChange(task.id, styleKey);
       }
       setShowColorPicker(false);
   };
@@ -140,7 +148,7 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
   const getFontSizeClass = (length: number) => {
     if (isZenMode) return 'text-2xl md:text-5xl font-bold';
     if (densityLevel === 2) {
-       if (length > 20) return 'text-[10px] leading-tight font-bold'; // Force bold even on small
+       if (length > 20) return 'text-[10px] leading-tight font-bold'; 
        return 'text-xs font-bold leading-tight';
     }
     if (densityLevel === 1) {
@@ -154,86 +162,55 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
   };
 
   const fontSizeClass = getFontSizeClass(task.text.length);
-  const isDense = densityLevel >= 2; // Compact mode (Smallest)
-  
-  // --- RESPONSIVE BUTTON SIZING LOGIC ---
-  
-  // Check if we are in the smallest mode (High Density)
+  const isDense = densityLevel >= 2; 
   const isSmallest = densityLevel === 2;
 
-  // Button Size:
-  // Smallest Mode: 16px (w-4 h-4) on mobile to fit 4 columns
-  // Normal Modes: 20px (w-5 h-5) on mobile
-  // Desktop: Larger sizes
   const btnSize = isSmallest ? 'w-4 h-4 md:w-6 md:h-6' : 'w-5 h-5 md:w-7 md:h-7';
-  
-  // Icon Size:
   const iconSize = isSmallest ? 10 : 13;
   
-  // Positioning & Spacing:
-  // Smallest Mode: Push closer to edge (0.5 = 2px), remove gap (gap-0)
+  // Position Logic
   const posTopLeft = isSmallest 
     ? 'top-0.5 left-0.5 md:top-2 md:left-2' 
     : 'top-1.5 left-1.5 md:top-2 md:left-2';
-    
+
   const posTopRight = isSmallest 
-    ? 'top-0.5 right-0.5 gap-0 md:top-2 md:right-2 md:gap-1' 
-    : 'top-1.5 right-1.5 gap-0.5 md:top-2 md:right-2 md:gap-1';
+    ? 'top-0.5 right-0.5 md:top-2 md:right-2' 
+    : 'top-1.5 right-1.5 md:top-2 md:right-2';
+    
+  // Adjusted bottom right to be a bit further from edge to accommodate the new container
+  const posBottomRight = isSmallest 
+    ? 'bottom-0.5 right-0.5 md:bottom-2 md:right-2' 
+    : 'bottom-1.5 right-1.5 md:bottom-2 md:right-2';
 
-  // Drag handlers
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    if (isZenMode || isEditing) {
-        e.preventDefault();
-        return;
-    }
-    if (onDragStart && typeof index === 'number') {
-        onDragStart(index);
-        e.dataTransfer.effectAllowed = 'move';
-    }
-  };
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    if (isZenMode || isEditing) return;
-    e.preventDefault();
-    if (onDragEnter && typeof index === 'number') {
-        onDragEnter(index);
-    }
-  };
-  
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (isZenMode) return;
-    e.preventDefault();
-  };
+  // Highlight Styles for Sorting
+  const sortingStyles = isSorting 
+     ? 'ring-4 ring-blue-500 scale-[1.02] z-50 shadow-2xl !opacity-100' 
+     : isSortingModeActive 
+        ? 'opacity-40 scale-95 blur-[1px]' 
+        : '';
 
   return (
     <div
-      draggable={!isZenMode && !isEditing}
-      onDragStart={handleDragStart}
-      onDragEnter={handleDragEnter}
-      onDragEnd={onDragEnd}
-      onDragOver={handleDragOver}
+      onContextMenu={(e) => e.preventDefault()} 
       className={`
         relative group aspect-square w-full flex flex-col items-center justify-center 
-        transition-all duration-300 transform paper-texture
+        transition-all duration-300 transform paper-texture select-none
         ${isExiting || isDeleting ? 'animate-ping opacity-0' : 'opacity-100 hover:scale-[1.05] hover:z-30'}
         ${className}
-        ${!isZenMode && !isEditing ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}
+        ${!isZenMode && !isEditing ? 'cursor-default active:scale-95' : 'cursor-default'}
         ${isZenMode ? 'p-8' : isDense ? 'p-1' : 'p-2 md:p-6'}
-        border-t border-white/60 border-b-2 border-b-black/5
         shadow-[2px_4px_12px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.05)]
+        ${sortingStyles}
       `}
       style={{ 
-        backgroundColor: task.color,
-        transform: !isZenMode ? `rotate(${task.rotation}deg)` : 'none',
+        backgroundColor: noteStyle.bg,
+        transform: !isZenMode && !isSorting ? `rotate(${task.rotation}deg)` : 'none',
       }}
       onClick={(e) => {
-          // Do not close color picker here, let the document listener handle it
+          // If in sorting mode but not the active sorting item, maybe switch sorting focus?
       }}
     >
-      {!isZenMode && !isDense && (
-         <div className={`absolute -top-2.5 sm:-top-3 left-1/2 -translate-x-1/2 bg-white/40 rotate-1 backdrop-blur-[1px] shadow-sm pointer-events-none z-10 w-8 sm:w-12 md:w-16 h-3 sm:h-4 md:h-5`}></div>
-      )}
-
+      
       {isZenMode && onClose && (
         <button
           onClick={handleClose}
@@ -244,8 +221,8 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
         </button>
       )}
 
-      {/* Controls */}
-      {!isZenMode && !isExiting && !isEditing && !isDeleting && (
+      {/* Controls - Hide during sorting to prevent distraction */}
+      {!isZenMode && !isExiting && !isEditing && !isDeleting && !isSortingModeActive && (
         <>
           {/* Top Left: Delete Button */}
           <button
@@ -256,36 +233,55 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
             `}
             title="永久删除"
             onPointerDown={(e) => e.stopPropagation()} 
+            onTouchStart={(e) => e.stopPropagation()}
           >
             <Trash2 size={iconSize} strokeWidth={2.5} />
           </button>
 
-          {/* Top Right: Edit, Focus & Color - Fixed alignment */}
-          <div className={`
-             absolute z-50 flex items-center justify-center transition-all duration-200 opacity-0 group-hover:opacity-100
-             ${posTopRight}
-          `}>
+          {/* Top Right: Sort Button */}
+          <button
+            onClick={handleSortClick}
+            className={`
+              absolute z-50 rounded-full bg-black/5 hover:bg-black/15 text-gray-700 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100
+              ${posTopRight} ${btnSize}
+            `}
+            title="排序/移动"
+            onPointerDown={(e) => e.stopPropagation()} 
+            onTouchStart={(e) => e.stopPropagation()}
+          >
+            <ArrowLeftRight size={iconSize} />
+          </button>
+          
+          {/* Bottom Right: Color, Edit, Focus - WRAPPED IN CONTAINER TO PREVENT MISCLICKS */}
+          <div 
+             className={`
+               absolute z-50 flex items-center justify-center transition-all duration-200 opacity-0 group-hover:opacity-100
+               bg-white/40 backdrop-blur-[2px] rounded-full shadow-sm border border-white/20
+               ${isSmallest ? 'p-0 gap-0' : 'p-0.5 gap-0.5'}
+               ${posBottomRight}
+             `}
+             onClick={(e) => e.stopPropagation()} // STOP PROPAGATION HERE: Clicking the gap won't complete task
+             onPointerDown={(e) => e.stopPropagation()}
+             onTouchStart={(e) => e.stopPropagation()}
+          >
              <button
               onClick={handleColorClick}
-              className={`rounded-full bg-black/5 hover:bg-black/15 text-gray-700 transition-colors relative flex items-center justify-center ${btnSize}`}
+              className={`rounded-full hover:bg-black/10 text-gray-700 transition-colors relative flex items-center justify-center ${btnSize}`}
               title="颜色"
-              onPointerDown={(e) => e.stopPropagation()} 
             >
               <Palette size={iconSize} />
             </button>
             <button
               onClick={handleEditClick}
-              className={`rounded-full bg-black/5 hover:bg-black/15 text-gray-700 transition-colors flex items-center justify-center ${btnSize}`}
+              className={`rounded-full hover:bg-black/10 text-gray-700 transition-colors flex items-center justify-center ${btnSize}`}
               title="编辑"
-              onPointerDown={(e) => e.stopPropagation()} 
             >
               <Pencil size={iconSize} />
             </button>
             <button
               onClick={handleFocus}
-              className={`rounded-full bg-black/5 hover:bg-black/15 text-gray-700 transition-colors flex items-center justify-center ${btnSize}`}
+              className={`rounded-full hover:bg-black/10 text-gray-700 transition-colors flex items-center justify-center ${btnSize}`}
               title="专注"
-              onPointerDown={(e) => e.stopPropagation()} 
             >
               <Eye size={iconSize} />
             </button>
@@ -295,17 +291,25 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
           {showColorPicker && (
              <div 
                 ref={colorPickerRef}
-                className="absolute top-8 right-0 bg-white p-1.5 rounded-lg shadow-xl flex gap-1 z-[60] animate-fade-in-up border border-gray-100"
-                onMouseDown={(e) => e.stopPropagation()} // Prevent closing immediately when clicking inside
+                className="absolute bottom-10 right-0 bg-white p-2 rounded-xl shadow-xl z-[60] animate-fade-in-up border border-gray-100 mb-1 grid grid-cols-5 gap-1.5 w-max"
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
              >
-                {COLOR_ARRAY.map(c => (
-                    <button 
-                        key={c} 
-                        onClick={(e) => { e.stopPropagation(); changeColor(c); }}
-                        className="w-4 h-4 md:w-5 md:h-5 rounded-full border border-gray-200 hover:scale-110 transition-transform"
-                        style={{ backgroundColor: c }}
-                    />
-                ))}
+                {STYLE_KEYS.map(key => {
+                    const style = getStickyStyle(key);
+                    return (
+                        <button 
+                            key={key} 
+                            onClick={(e) => { e.stopPropagation(); changeColor(key); }}
+                            className="w-5 h-5 md:w-6 md:h-6 rounded-full border border-gray-200 hover:scale-110 transition-transform relative overflow-hidden"
+                            style={{ 
+                                backgroundColor: style.bg
+                            }}
+                            title={style.name}
+                        />
+                    );
+                })}
              </div>
           )}
         </>
@@ -323,7 +327,7 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <div className={`w-full h-full flex items-center justify-center overflow-hidden pointer-events-none`}>
+        <div className={`w-full h-full flex items-center justify-center overflow-hidden pointer-events-none pb-4`}>
           <p className={`
             text-[#333] text-center handwritten break-words w-full select-none px-1
             drop-shadow-[0_1px_0px_rgba(255,255,255,0.4)]
@@ -335,7 +339,8 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
         </div>
       )}
 
-      {!isEditing && !showColorPicker && (
+      {/* Completion Overlay - Disabled during sorting */}
+      {!isEditing && !showColorPicker && !isSortingModeActive && (
         <button
           onClick={handleComplete}
           className="absolute inset-0 bg-transparent opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center cursor-pointer z-20 active:opacity-100"

@@ -1,4 +1,5 @@
 
+
 export interface Task {
   id: string;
   text: string;
@@ -8,17 +9,6 @@ export interface Task {
   isCompleted: boolean;
   rotation: number;
 }
-
-// Morandi Color Palette (Sticky Notes)
-export const COLORS = {
-  PINK: "#FFC8C8",    // Lighter Pink
-  BLUE: "#BDE0FE",    // Lighter Blue
-  YELLOW: "#FDFD96",  // Lighter Yellow
-  GREEN: "#C1E1C1",   // Lighter Green
-  PURPLE: "#E2C6E8",  // Lighter Purple
-};
-
-export const COLOR_ARRAY = Object.values(COLORS);
 
 // App Background Themes
 export const THEMES = {
@@ -44,8 +34,32 @@ export const isDarkTheme = (key: ThemeKey): boolean => {
   return ['BOARD', 'DARK', 'MIDNIGHT', 'FOREST', 'EGGPLANT', 'CHOCOLATE'].includes(key);
 };
 
+// --- STICKY NOTE STYLES (Solids Only) ---
+
+export interface StickyStyle {
+  id: string;
+  bg: string;
+  name: string;
+  css?: string;
+}
+
+export const STICKY_STYLES: Record<string, StickyStyle> = {
+  '#FFC8C8': { id: '#FFC8C8', bg: '#FFC8C8', name: 'Pink' },
+  '#BDE0FE': { id: '#BDE0FE', bg: '#BDE0FE', name: 'Blue' },
+  '#FDFD96': { id: '#FDFD96', bg: '#FDFD96', name: 'Yellow' },
+  '#C1E1C1': { id: '#C1E1C1', bg: '#C1E1C1', name: 'Green' },
+  '#E2C6E8': { id: '#E2C6E8', bg: '#E2C6E8', name: 'Purple' },
+};
+
+export const STYLE_KEYS = Object.keys(STICKY_STYLES);
+
+// Helper to get style safely
+export const getStickyStyle = (key: string): StickyStyle => {
+  return STICKY_STYLES[key] || STICKY_STYLES['#FFC8C8'];
+};
+
 export const getRandomColor = () => {
-  return COLOR_ARRAY[Math.floor(Math.random() * COLOR_ARRAY.length)];
+  return STYLE_KEYS[Math.floor(Math.random() * STYLE_KEYS.length)];
 };
 
 export const getRandomRotation = () => {

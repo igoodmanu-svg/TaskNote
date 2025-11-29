@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { Plus, Shuffle, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { COLOR_ARRAY } from '../types';
+import { Plus, Shuffle, X, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { STYLE_KEYS, getStickyStyle } from '../types';
 
 interface InputAreaProps {
   onAdd: (text: string, color: string | null) => void;
@@ -31,121 +31,187 @@ export const InputArea: React.FC<InputAreaProps> = ({ onAdd, isDark = false }) =
   };
   
   const handleContainerClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !isCollapsed) {
+    // Only focus if clicking the main area and NOT the toggle button or collapsed state
+    if (!isCollapsed && e.target === e.currentTarget) {
         inputRef.current?.focus();
     }
   };
 
-  const toggleCollapse = () => {
+  const toggleCollapse = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering container click
     setIsCollapsed(!isCollapsed);
   };
 
-  const containerBg = isDark ? 'bg-gray-900/80 border-gray-700' : 'bg-white/80 border-white/40';
-  const inputBg = isDark ? 'bg-gray-800 text-white placeholder-gray-500 border-gray-700' : 'bg-gray-50 text-gray-800 placeholder-gray-400 border-gray-200';
+  // Modern Glassmorphism Styles
+  const containerBg = isDark 
+    ? 'bg-gray-900/90 border-gray-700/50' 
+    : 'bg-white/80 border-white/60';
+    
+  const backdropBlur = 'backdrop-blur-xl saturate-150';
+
+  const inputStyles = isDark 
+    ? 'bg-gray-800/50 text-white placeholder-gray-500 border-gray-700/50 focus:ring-blue-500/50' 
+    : 'bg-white/60 text-gray-800 placeholder-gray-400 border-gray-200/50 focus:bg-white focus:ring-blue-300/50';
+
+  // Calculate position for collapse animation
+  // Using bottom positioning instead of transform to prevent iOS cursor floating bugs
+  const bottomStyle = isCollapsed 
+    ? 'calc(-100% + 3rem + env(safe-area-inset-bottom))' 
+    : '0';
 
   return (
-    <div 
-        className={`fixed left-0 right-0 z-[100] flex flex-col items-center transition-all duration-300 ease-in-out`}
-        style={{ bottom: isCollapsed ? '-170px' : '0' }}
-    >
-      {/* Light Gradient Mask - Only show when expanded and in light mode */}
-      {!isDark && !isCollapsed && (
-         <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-white/90 via-white/60 to-transparent -z-10 pointer-events-none touch-none"></div>
-      )}
-
-      {/* Collapse Toggle Button */}
-      <button 
-        onClick={toggleCollapse}
-        className={`
-            relative z-20 flex items-center justify-center w-12 h-8 rounded-t-xl 
-            shadow-[0_-4px_10px_rgba(0,0,0,0.05)] border-t border-x -mb-px
-            ${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white/90 border-white/40 text-gray-500'}
-            hover:scale-105 transition-transform
-        `}
-      >
-        {isCollapsed ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-      </button>
-
-      {/* Main Container */}
+    <>
+      {/* Toggle Button (Floating Pill) */}
       <div 
-        onClick={handleContainerClick}
-        className={`w-full backdrop-blur-xl border-t shadow-[0_-4px_30px_rgba(0,0,0,0.1)] rounded-t-3xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-6 transition-colors duration-300 ${containerBg}`}
+        className="fixed left-0 right-0 z-[101] flex justify-center transition-all duration-300 ease-in-out pointer-events-none"
+        style={{ 
+            bottom: isCollapsed ? 'calc(1.5rem + env(safe-area-inset-bottom))' : 'calc(100% - 3rem)', 
+            // This logic is tricky with the new bottom positioning, so we attach it to the main container logic visualy
+            // Actually, let's put it inside the container but absolutely positioned to float top
+        }}
       >
-        <div className="max-w-2xl mx-auto px-4 flex flex-col gap-4">
-          
-          {/* Color Selection Row */}
-          <div className="flex items-center justify-center gap-4 overflow-x-auto py-1 no-scrollbar touch-pan-x min-h-[48px]">
-             <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onTouchStart={(e) => e.preventDefault()}
-              onClick={() => setSelectedColor(null)}
-              className={`
-                w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-200 flex-shrink-0
-                bg-gradient-to-br from-pink-200 via-blue-200 to-green-200
-                ${selectedColor === null ? 'border-gray-400 scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}
-              `}
-              title="随机颜色"
+      </div>
+
+      <div 
+        className={`fixed left-0 right-0 z-[100] transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] flex flex-col shadow-[0_-8px_30px_rgba(0,0,0,0.08)] border-t ${containerBg} ${backdropBlur}`}
+        style={{ bottom: isCollapsed ? '-140px' : '0' }} // Simple collapse logic based on approx height
+        onClick={handleContainerClick}
+      >
+        {/* Floating Toggle Pill */}
+        <div className="absolute -top-5 left-0 right-0 flex justify-center pointer-events-none">
+            <button 
+                onClick={toggleCollapse}
+                className={`
+                    pointer-events-auto
+                    flex items-center justify-center gap-1 px-4 py-1.5 rounded-full
+                    shadow-md border backdrop-blur-md transition-all active:scale-95
+                    ${isDark ? 'bg-gray-800 border-gray-600 text-gray-300' : 'bg-white border-gray-100 text-gray-500 hover:text-gray-700'}
+                `}
             >
-              {selectedColor === null && <Shuffle size={16} className="text-gray-700" />}
+                {isCollapsed ? (
+                    <>
+                        <ChevronUp size={16} />
+                        <span className="text-xs font-bold">展开输入</span>
+                    </>
+                ) : (
+                    <ChevronDown size={20} />
+                )}
             </button>
+        </div>
+
+        <div className={`w-full pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5`}>
+          <div className="max-w-2xl mx-auto px-4 flex flex-col gap-4">
             
-            {COLOR_ARRAY.map((color) => (
-              <button
-                key={color}
+            {/* Color Selection Row (Scrollable) */}
+            <div className="flex items-center justify-center gap-3 overflow-x-auto py-2 no-scrollbar touch-pan-x px-2">
+               {/* Random Button */}
+               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onTouchStart={(e) => e.preventDefault()}
-                onClick={() => setSelectedColor(color)}
+                onClick={() => setSelectedColor(null)}
                 className={`
-                  w-10 h-10 rounded-full border-2 transition-all duration-200 flex-shrink-0 shadow-sm
-                  ${selectedColor === color ? 'border-gray-400 scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}
+                  w-9 h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 flex-shrink-0
+                  bg-gradient-to-tr from-pink-300 via-purple-300 to-indigo-300 text-white
+                  ${selectedColor === null 
+                    ? 'border-gray-400 scale-110 shadow-lg ring-2 ring-offset-2 ring-gray-200' 
+                    : 'border-transparent opacity-80 hover:opacity-100 hover:scale-105'}
                 `}
-                style={{ backgroundColor: color }}
-              />
-            ))}
-          </div>
-
-          {/* Input Row */}
-          <form onSubmit={handleSubmit} className="flex gap-3 items-center">
-            <div className="relative flex-1 group">
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="下一步做什么？"
-                className={`w-full text-lg px-5 py-4 rounded-2xl outline-none focus:bg-opacity-100 transition-all shadow-inner font-bold tracking-wide border ${inputBg}`}
-                style={{ fontSize: '16px', touchAction: 'manipulation' }}
-              />
-              {inputValue && (
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onTouchStart={(e) => e.preventDefault()}
-                  onClick={(e) => { 
-                      e.stopPropagation();
-                      setInputValue(''); 
-                      inputRef.current?.focus(); 
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1.5 rounded-full bg-black/5 hover:bg-black/10 transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              )}
+                title="随机颜色"
+              >
+                {selectedColor === null ? <Check size={18} strokeWidth={3} /> : <Shuffle size={16} />}
+              </button>
+              
+              <div className="w-px h-6 bg-gray-300/50 mx-1"></div>
+              
+              {/* Color Circles */}
+              {STYLE_KEYS.map((key) => {
+                const style = getStickyStyle(key);
+                const isSelected = selectedColor === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onTouchStart={(e) => e.preventDefault()}
+                    onClick={() => setSelectedColor(key)}
+                    className={`
+                      w-9 h-9 md:w-10 md:h-10 rounded-full border border-black/5 transition-all duration-300 flex-shrink-0 relative overflow-hidden group
+                      ${isSelected 
+                        ? 'scale-110 shadow-md ring-2 ring-offset-2 ring-blue-300/80 z-10' 
+                        : 'hover:scale-105 hover:shadow-sm opacity-90'}
+                    `}
+                    style={{ 
+                      backgroundColor: style.bg
+                    }}
+                    title={style.name}
+                  >
+                    {isSelected && (
+                        <div className="absolute inset-0 flex items-center justify-center animate-fade-in-up">
+                            <div className="w-2 h-2 bg-gray-800/20 rounded-full"></div>
+                        </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            
-            <button
-              type="submit"
-              disabled={!inputValue.trim()}
-              className="bg-gray-800 text-white w-16 h-[60px] rounded-2xl flex items-center justify-center hover:bg-black active:scale-95 transition-all shadow-lg disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-            >
-              <Plus size={32} strokeWidth={3} />
-            </button>
-          </form>
+
+            {/* Input Row */}
+            <form onSubmit={handleSubmit} className="flex gap-3 items-center relative">
+              <div className="relative flex-1 group">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="下一步做什么？"
+                  className={`
+                    w-full text-lg px-6 py-4 rounded-full outline-none transition-all 
+                    shadow-[inset_0_2px_4px_rgba(0,0,0,0.03)] 
+                    focus:shadow-[inset_0_2px_4px_rgba(0,0,0,0.02),0_4px_12px_rgba(0,0,0,0.05)]
+                    font-bold tracking-wide border ${inputStyles}
+                  `}
+                  style={{ fontSize: '16px', touchAction: 'manipulation' }}
+                />
+                
+                {/* Clear Button */}
+                {inputValue && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onTouchStart={(e) => e.preventDefault()}
+                    onClick={(e) => { 
+                        e.stopPropagation();
+                        setInputValue(''); 
+                        inputRef.current?.focus(); 
+                    }}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-black/5 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
+              
+              {/* Add Button */}
+              <button
+                type="submit"
+                disabled={!inputValue.trim()}
+                className={`
+                    w-14 h-14 md:w-16 md:h-[60px] rounded-full flex items-center justify-center 
+                    transition-all duration-300 shadow-lg hover:shadow-xl active:scale-95
+                    disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100
+                    ${isDark 
+                        ? 'bg-gradient-to-br from-gray-700 to-gray-900 text-white' 
+                        : 'bg-gradient-to-br from-gray-800 to-black text-white'}
+                `}
+              >
+                <Plus size={28} strokeWidth={3} />
+              </button>
+            </form>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };

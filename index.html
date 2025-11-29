@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -53,13 +54,17 @@
 
     <!-- Custom Styles -->
     <style>
+      html {
+        background-color: #F3F4F6; /* Fallback */
+        height: 100%;
+      }
       body {
         font-family: 'Nunito', sans-serif;
         background-color: #F3F4F6; /* Default Light Gray */
         background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
-        /* overscroll-behavior-y: none; REMOVED TO FIX IOS SCROLL BUG */
         -webkit-tap-highlight-color: transparent;
         transition: background-color 0.5s ease;
+        min-height: 100%;
       }
 
       /* Safe Area Variables */
