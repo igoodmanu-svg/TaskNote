@@ -1,0 +1,5 @@
+{
+  "name": "Task Sticky Notes",
+  "description": "A visual, dopamine-friendly task manager using sticky notes on a dark board. Click to complete tasks instantly.",
+  "requestFramePermissions": []
+}
