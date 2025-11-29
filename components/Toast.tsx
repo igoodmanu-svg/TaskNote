@@ -13,7 +13,7 @@ export const Toast: React.FC<ToastProps> = ({ show, message, onUndo, showUndoBut
   return (
     <div 
       className={`
-        fixed top-[75%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60]
+        fixed top-[75%] left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999]
         bg-black/80 backdrop-blur-md px-5 py-3 rounded-full shadow-2xl border border-white/10
         flex items-center gap-3 transition-all duration-500 ease-out transform pointer-events-auto
         ${show ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4 pointer-events-none'}
