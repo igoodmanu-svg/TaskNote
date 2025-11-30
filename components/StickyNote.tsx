@@ -47,9 +47,9 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
   // Get the style object
   const noteStyle = getStickyStyle(task.color);
 
-  // Close color picker when clicking outside
+  // 修复 1: 解决 event 类型报错
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: any) => {
       if (showColorPicker && colorPickerRef.current && !colorPickerRef.current.contains(event.target as Node)) {
         setShowColorPicker(false);
       }
@@ -165,6 +165,7 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
   const isDense = densityLevel >= 2; 
   const isSmallest = densityLevel === 2;
 
+  // 修复 2: 找回丢失的变量定义
   const btnSize = isSmallest ? 'w-4 h-4 md:w-6 md:h-6' : 'w-5 h-5 md:w-7 md:h-7';
   const iconSize = isSmallest ? 10 : 13;
   
@@ -211,6 +212,14 @@ export const StickyNote: React.FC<StickyNoteProps> = ({
       }}
     >
       
+      {/* 高亮增强版胶带 (加深了不透明度，确保能看见) */}
+      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-16 h-5 z-20 pointer-events-none select-none opacity-90">
+        <div 
+          className="w-full h-full bg-white/50 backdrop-blur-[1px] shadow-sm rotate-[-1deg]" 
+          style={{ clipPath: 'polygon(2% 0, 98% 0, 100% 10%, 98% 100%, 2% 100%, 0 90%)' }} 
+        />
+      </div>
+
       {isZenMode && onClose && (
         <button
           onClick={handleClose}
