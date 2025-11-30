@@ -73,7 +73,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, com
                 {onRestore && (
                   <button
                     onClick={() => onRestore(task.id)}
-                    className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-gray-400 hover:text-green-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                    className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-gray-400 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex-shrink-0"
                     title="撤回任务"
                   >
                     <RotateCcw size={16} />
