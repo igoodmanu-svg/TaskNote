@@ -192,7 +192,7 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [zenMode, sortingTaskId]);
 
-  // --- Audio Logic (Optimized) ---
+  // --- Audio Logic ---
   const initAudio = useCallback(() => {
     if (!soundEnabled) return;
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
@@ -207,7 +207,7 @@ const App: React.FC = () => {
   }, [soundEnabled]);
 
   useEffect(() => {
-    // Initialize audio on first interaction to comply with browser policies
+    // Initialize audio on first interaction
     const events = ['touchstart', 'click', 'keydown'];
     const handleInteraction = () => {
       initAudio();
@@ -238,7 +238,7 @@ const App: React.FC = () => {
         } else if (type === 'complete') {
             osc.type = 'sine'; 
             osc.frequency.setValueAtTime(1568, now); 
-            gain.gain.setValueAtTime(0.2, now); // Slightly lower volume
+            gain.gain.setValueAtTime(0.2, now); 
             gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
             osc.start(now);
             osc.stop(now + 1.2);
@@ -257,23 +257,16 @@ const App: React.FC = () => {
   }, [soundEnabled]);
 
 const triggerFeedback = useCallback(() => {
-    // 1. 震动反馈 (保留！这对安卓不卡，而且手感很好)
     if (navigator.vibrate) navigator.vibrate(50);
 
-    // 2. 核心修改：检测是否为安卓设备
     const ua = navigator.userAgent;
     const isAndroid = /Android/i.test(ua);
+    if (isAndroid) return; // Android 只震动，不放烟花以优化性能
 
-    // 3. 如果是安卓，直接 return，不执行后面的烟花逻辑
-    if (isAndroid) return;
-
-    // 4. 只有 iOS 和 电脑端 才放烟花
     if ((window as any).confetti) {
-        // iOS 依然做轻量化处理
         const isIOS = /iPhone|iPad|iPod/i.test(ua);
-        
         (window as any).confetti({
-            particleCount: isIOS ? 40 : 80, // iOS 40个粒子，PC 80个
+            particleCount: isIOS ? 40 : 80,
             spread: isIOS ? 50 : 70,
             origin: { y: 0.6 },
             colors: ['#FFC8C8', '#BDE0FE', '#FDFD96', '#C1E1C1', '#E2C6E8'],
@@ -294,7 +287,7 @@ const triggerFeedback = useCallback(() => {
       }, isUndo ? 2000 : 1500); 
   }, []);
 
-  // --- Task Handlers (Wrapped in useCallback) ---
+  // --- Task Handlers ---
   const addTask = useCallback((text: string, color: string | null) => {
     playSound('add');
     const newTask: Task = {
@@ -307,7 +300,6 @@ const triggerFeedback = useCallback(() => {
     };
     setTasks(prev => [...prev, newTask]);
     
-    // Smooth scroll to bottom
     setTimeout(() => {
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     }, 100);
@@ -326,11 +318,9 @@ const triggerFeedback = useCallback(() => {
   }, []);
 
 const completeTask = useCallback((id: string) => {
-    // 立即播放声音和震动
     playSound('complete');
-    triggerFeedback(); // 安卓只会震动，不会放烟花
+    triggerFeedback();
     
-    // 立即更新数据，不需要延迟了
     setTasks(prev => prev.map(task => 
       task.id === id 
         ? { ...task, isCompleted: true, completedAt: Date.now() } 
@@ -371,11 +361,9 @@ const completeActiveTasks = useCallback(() => {
     playSound('silent'); 
     setTimeout(() => {
         if (window.confirm(`【一键完成】\n\n确认将屏幕上的 ${count} 个任务全部标记为完成吗？`)) {
-           // 1. 先特效
            playSound('complete');
            triggerFeedback();
            
-           // 2. 后更新数据
            requestAnimationFrame(() => {
                setTimeout(() => {
                    setTasks(prev => prev.map(t => 
@@ -448,34 +436,79 @@ const completeActiveTasks = useCallback(() => {
   const bgClass = isDark ? 'text-gray-100' : 'text-gray-800';
   const buttonBg = isDark ? 'bg-gray-800 text-gray-200 border-gray-700 hover:bg-gray-700' : 'bg-white/70 text-gray-600 hover:bg-white border-white/60';
 
-  // --- Import/Export ---
+  // --- Import/Export Optimized ---
   const handleExport = useCallback(() => {
-    const data = { title: appTitle, tasks, soundEnabled, exportedAt: Date.now() };
+    const data = { 
+      title: appTitle, 
+      tasks, 
+      soundEnabled, 
+      exportedAt: Date.now(),
+      version: 2 
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `task-notes-backup-${new Date().toISOString().split('T')[0]}.json`;
+    // 优化文件名，带上日期
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.download = `todo-backup-${dateStr}.json`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
   }, [appTitle, tasks, soundEnabled]);
 
-  const handleImport = useCallback((file: File) => {
+  const handleImport = useCallback((file: File, isMerge: boolean) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string);
-        if (!data || typeof data !== 'object') throw new Error();
-        
-        if (window.confirm(`确认覆盖当前数据？(包含 ${Array.isArray(data.tasks) ? data.tasks.length : 0} 个任务)`)) {
-            if (Array.isArray(data.tasks)) setTasks(data.tasks);
-            if (data.title) setAppTitle(data.title);
-            if (data.soundEnabled !== undefined) setSoundEnabled(data.soundEnabled);
+        const jsonStr = e.target?.result as string;
+        const data = JSON.parse(jsonStr);
+
+        if (!data || typeof data !== 'object') throw new Error("Invalid Format");
+        const importedTasks = Array.isArray(data.tasks) ? data.tasks : [];
+
+        if (isMerge) {
+            // === 合并逻辑 ===
+            const tasksMap = new Map<string, Task>();
+            // 先加载现有任务
+            tasks.forEach(t => tasksMap.set(t.id, t));
+            
+            let addedCount = 0;
+            let updatedCount = 0;
+
+            // 再加载导入任务 (ID相同则更新，不同则新增)
+            importedTasks.forEach((t: Task) => {
+                if (tasksMap.has(t.id)) {
+                    tasksMap.set(t.id, t);
+                    updatedCount++;
+                } else {
+                    tasksMap.set(t.id, t);
+                    addedCount++;
+                }
+            });
+
+            setTasks(Array.from(tasksMap.values()));
+            // 可选：如果当前标题为空，才覆盖标题
+            if (data.title && !appTitle) setAppTitle(data.title);
+            
+            triggerToast(`同步成功！新增 ${addedCount}，更新 ${updatedCount}`, false);
             setSettingsOpen(false);
-            triggerToast("数据导入成功！", false);
+        } else {
+            // === 覆盖逻辑 ===
+            if (window.confirm(`⚠️ 警告：这将删除当前所有任务，并替换为文件中的 ${importedTasks.length} 个任务。\n\n确定要继续吗？`)) {
+                setTasks(importedTasks);
+                if (data.title) setAppTitle(data.title);
+                if (data.soundEnabled !== undefined) setSoundEnabled(data.soundEnabled);
+                setSettingsOpen(false);
+                triggerToast("数据已恢复 (覆盖模式)", false);
+            }
         }
-      } catch { alert('导入失败：文件格式错误。'); }
+      } catch { 
+          alert('导入失败：文件格式错误。'); 
+      }
     };
     reader.readAsText(file);
-  }, [triggerToast]);
+  }, [tasks, appTitle, triggerToast]);
 
   return (
     <div 
