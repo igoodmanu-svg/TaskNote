@@ -1,7 +1,8 @@
 {
   "name": "任务便利贴",
   "short_name": "便利贴",
-  "start_url": "/",
+  "start_url": "./index.html", 
+  "scope": ".",
   "display": "standalone",
   "background_color": "#F3F4F6",
   "theme_color": "#F3F4F6",
